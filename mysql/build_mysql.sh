@@ -1,12 +1,4 @@
 #!/bin/bash
-#########################################################################
-# File Name: build_MySQL.sh
-# Author: meetbill
-# mail: meetbill@163.com
-# Created Time: 2017-06-10 04:46:31
-#########################################################################
-# Notes: install mysql5.6 on centos
-#
 mysql_install_dir=/usr/local/mysql
 mysql_data_dir=/data/mysql
 mysql_6_version=5.6.36
