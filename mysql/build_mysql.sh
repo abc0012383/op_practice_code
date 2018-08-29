@@ -1,5 +1,4 @@
 #!/bin/bash
-
 mysql_install_dir=/usr/local/mysql
 mysql_data_dir=/data/mysql
 mysql_6_version=5.6.36
