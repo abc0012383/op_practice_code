@@ -1,24 +1,41 @@
-#!/bin/bash
+#!/usr/bin/env bash
 mysql_install_dir=/usr/local/mysql
 mysql_data_dir=/data/mysql
-mysql_6_version=5.6.36
+mysql_6_version=5.6.41
 dbrootpwd=root
- 
+
+nginx_install_dir=/usr/local/nginx
+nginx_version=1.14.0
+
+
 Mem=`free -m | awk '/Mem:/{print $2}'`
- 
+
+
+function update_install(){
+
+/usr/bin/systemctl stop firewalld
+/usr/bin/systemctl disable firewalld
+/usr/sbin/iptables -F
+
+yum -y install epel-release wget telnet net-tools python-paramiko gcc gcc-c++ dejavu-sans-fonts python-setuptools python-devel sendmail mailx net-snmp net-snmp-devel net-snmp-utils freetype-devel libpng-devel perl unbound libtasn1-devel p11-kit-devel OpenIPMI unixODBC vim make cmake bison-devel ncurses-devel lsof rsync pcre pcre-devel zlib zlib-devel openssl openssl-devel
+
+yum -y update
+
+}
+
 function build_MySQL()
 {
-    yum -y install make gcc-c++ cmake bison-devel  ncurses-devel
     if [[ ! -f "./mysql-${mysql_6_version}.tar.gz" ]]
     then
         echo "the mysql-file not found"
-        wget http://mirrors.sohu.com/mysql/MySQL-5.6/mysql-${mysql_6_version}.tar.gz
+        wget https://cdn.mysql.com//Downloads/MySQL-5.6/mysql-${mysql_6_version}.tar.gz
     fi
-    [[ ! -f "./mysql-${mysql_6_version}.tar.gz" ]] && exit
-     
+
+    [[ -f "./mysql-${mysql_6_version}.tar.gz" ]] && exit
+
     id -u mysql >/dev/null 2>&1
     [ $? -ne 0 ] && useradd -M -s /sbin/nologin mysql
-     
+
     mkdir -p $mysql_data_dir;chown mysql.mysql -R $mysql_data_dir
     tar zxf mysql-${mysql_6_version}.tar.gz
     cd mysql-$mysql_6_version
@@ -40,10 +57,10 @@ function build_MySQL()
     -DDEFAULT_CHARSET=utf8mb4 \
     -DDEFAULT_COLLATION=utf8mb4_general_ci \
     -DWITH_EMBEDDED_SERVER=1 \
-     
+
     make
     make install
-     
+
     if [ -d "$mysql_install_dir/support-files" ];then
         echo "${CSUCCESS}MySQL install successfully! ${CEND}"
         cd ..
@@ -53,12 +70,11 @@ function build_MySQL()
         echo "${CFAILURE}MySQL install failed, Please contact the author! ${CEND}"
         kill -9 $$
     fi
-    
-    #####################################################################
+
     /bin/cp $mysql_install_dir/support-files/mysql.server /etc/init.d/mysqld
     chmod +x /etc/init.d/mysqld
     chkconfig mysqld on
-     
+
     # my.cf
     [ -d "/etc/mysql" ] && /bin/mv /etc/mysql{,_bk}
     cat > /etc/my.cnf << EOF
@@ -66,26 +82,26 @@ function build_MySQL()
 port = 3306
 socket = /tmp/mysql.sock
 default-character-set = utf8mb4
- 
+
 [mysqld]
 port = 3306
 socket = /tmp/mysql.sock
- 
+
 basedir = $mysql_install_dir
 datadir = $mysql_data_dir
 pid-file = $mysql_data_dir/mysql.pid
 user = mysql
 bind-address = 0.0.0.0
 server-id = 1
- 
+
 init-connect = 'SET NAMES utf8mb4'
 character-set-server = utf8mb4
- 
+
 skip-name-resolve
 skip-external-locking
 #skip-networking
 back_log = 300
- 
+
 max_connections = 1000
 max_connect_errors = 6000
 open_files_limit = 65535
@@ -94,7 +110,7 @@ max_allowed_packet = 4M
 binlog_cache_size = 1M
 max_heap_table_size = 8M
 tmp_table_size = 16M
- 
+
 read_buffer_size = 2M
 read_rnd_buffer_size = 8M
 sort_buffer_size = 8M
@@ -114,7 +130,7 @@ long_query_time = 1
 #slow_query_log_file = $mysql_data_dir/mysql-slow.log
 performance_schema = 0
 explicit_defaults_for_timestamp
- 
+
 #lower_case_table_names = 1
 default_storage_engine = InnoDB
 #default-storage-engine = MyISAM
@@ -131,27 +147,27 @@ innodb_log_file_size = 32M
 innodb_log_files_in_group = 3
 innodb_max_dirty_pages_pct = 90
 innodb_lock_wait_timeout = 120
- 
+
 bulk_insert_buffer_size = 8M
 myisam_sort_buffer_size = 8M
 myisam_max_sort_file_size = 10G
 myisam_repair_threads = 1
- 
+
 interactive_timeout = 28800
 wait_timeout = 28800
- 
+
 [mysqldump]
 quick
 max_allowed_packet = 16M
- 
+
 [myisamchk]
 key_buffer_size = 8M
 sort_buffer_size = 8M
 read_buffer = 4M
 write_buffer = 4M
-     
+
 EOF
-     
+
     if [ $Mem -gt 1500 -a $Mem -le 2500 ];then
         sed -i 's@^thread_cache_size.*@thread_cache_size = 16@' /etc/my.cnf
         sed -i 's@^query_cache_size.*@query_cache_size = 16M@' /etc/my.cnf
@@ -177,16 +193,16 @@ EOF
         sed -i 's@^tmp_table_size.*@tmp_table_size = 128M@' /etc/my.cnf
         sed -i 's@^table_open_cache.*@table_open_cache = 1024@' /etc/my.cnf
     fi
-     
+
     $mysql_install_dir/scripts/mysql_install_db --user=mysql --basedir=$mysql_install_dir --datadir=$mysql_data_dir
-     
+
     chown mysql.mysql -R $mysql_data_dir
     service mysqld start
     [ -z "`grep ^'export PATH=' /etc/profile`" ] && echo "export PATH=$mysql_install_dir/bin:\$PATH" >> /etc/profile
     [ -n "`grep ^'export PATH=' /etc/profile`" -a -z "`grep $mysql_install_dir /etc/profile`" ] && sed -i "s@^export PATH=\(.*\)@export PATH=$mysql_install_dir/bin:\1@" /etc/profile
-     
+
     . /etc/profile
-     
+
     $mysql_install_dir/bin/mysql -e "grant all privileges on *.* to root@'127.0.0.1' identified by \"$dbrootpwd\" with grant option;"
     $mysql_install_dir/bin/mysql -e "grant all privileges on *.* to root@'localhost' identified by \"$dbrootpwd\" with grant option;"
     $mysql_install_dir/bin/mysql -uroot -p$dbrootpwd -e "delete from mysql.user where Password='';"
@@ -198,6 +214,37 @@ EOF
     echo "$mysql_install_dir/lib" > mysql.conf
     /sbin/ldconfig
     service mysqld stop
+    service mysqld start
 }
 
+function build_nginx(){
+
+    if [[ ! -f "./nginx-${nginx_version}.tar.gz" ]]
+    then
+        echo "the nginx install file not found"
+        wget http://nginx.org/download/nginx-${nginx_version}.tar.gz
+    fi
+
+    [[ -f "./nginx-${nginx_version}.tar.gz" ]] && exit
+
+    id -u nginx >/dev/null 2>&1
+    [ $? -ne 0 ] && useradd -M -s /sbin/nologin nginx
+
+    tar zxvf nginx-${nginx_version}.tar.gz
+    cd nginx-$nginx_version
+    make clean
+    [ ! -d "$nginx_install_dir" ] && mkdir -p $nginx_install_dir
+
+    ./configure --prefix=$nginx_install_dir
+
+    make&&make install
+
+    ${nginx_install_dir}/sbin/nginx
+
+    echo "/usr/local/nginx/sbin/nginx" >> /etc/rc.local
+}
+
+
+update_install
 build_MySQL
+build_nginx
