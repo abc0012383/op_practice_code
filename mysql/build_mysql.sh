@@ -17,7 +17,7 @@ function update_install(){
 /usr/bin/systemctl disable firewalld
 /usr/sbin/iptables -F
 
-yum -y install epel-release wget telnet net-tools python-paramiko gcc gcc-c++ dejavu-sans-fonts python-setuptools python-devel sendmail mailx net-snmp net-snmp-devel net-snmp-utils freetype-devel libpng-devel perl unbound libtasn1-devel p11-kit-devel OpenIPMI unixODBC vim make cmake bison-devel ncurses-devel lsof rsync pcre pcre-devel zlib zlib-devel openssl openssl-devel
+yum -y install epel-release wget telnet net-tools python-paramiko gcc gcc-c++ git dejavu-sans-fonts python-setuptools python-devel sendmail mailx net-snmp net-snmp-devel net-snmp-utils freetype-devel libpng-devel perl unbound libtasn1-devel p11-kit-devel OpenIPMI unixODBC vim make cmake bison-devel ncurses-devel lsof rsync pcre pcre-devel zlib zlib-devel openssl openssl-devel
 
 yum -y update
 
