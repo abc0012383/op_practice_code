@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+
+mysql_install_dir=/usr/local/mysql
+mysql_data_dir=/data/mysql
 mysql_6_version=5.6.41
 dbrootpwd=root
 
@@ -6,14 +9,34 @@ nginx_install_dir=/usr/local/nginx
 nginx_version=1.14.0
 
 
+Mem=`free -m | awk '/Mem:/{print $2}'`
+
+
 function update_install(){
 
 #/usr/bin/systemctl stop firewalld
 #/usr/bin/systemctl disable firewalld
 #/usr/sbin/iptables -F
+
+yum -y install epel-release wget net-tools python-paramiko gcc gcc-c++ git dejavu-sans-fonts python-setuptools python-devel net-snmp net-snmp-devel net-snmp-utils freetype-devel libpng-devel perl unbound libtasn1-devel p11-kit-devel OpenIPMI unixODBC vim make cmake bison-devel ncurses-devel lsof rsync pcre pcre-devel zlib zlib-devel openssl openssl-devel curl
+
+yum -y update
+
 }
 
-function build_MySQL()
+
+function build_MySQL(){
+
+    if [[ ! -f "./mysql-${mysql_6_version}.tar.gz" ]]
+    then
+        echo "the mysql-file not found"
+        wget https://cdn.mysql.com//Downloads/MySQL-5.6/mysql-${mysql_6_version}.tar.gz
+    fi
+
+    [[ -f "./mysql-${mysql_6_version}.tar.gz" ]] && exit
+
+    id -u mysql >/dev/null 2>&1
+
     [ $? -ne 0 ] && useradd -M -s /sbin/nologin mysql
 
     mkdir -p $mysql_data_dir;chown mysql.mysql -R $mysql_data_dir
@@ -34,6 +57,10 @@ function build_MySQL()
     -DENABLE_DTRACE=0 \
     -DDEFAULT_COLLATION=utf8mb4_general_ci \
     -DWITH_EMBEDDED_SERVER=1 \
+
+    make
+    make install
+
         echo "${CSUCCESS}MySQL install successfully! ${CEND}"
         cd ..
         /bin/rm -rf mysql-$mysql_6_version
@@ -135,6 +162,7 @@ EOF
     chown mysql.mysql -R $mysql_data_dir
     service mysqld start
     [ -z "`grep ^'export PATH=' /etc/profile`" ] && echo "export PATH=$mysql_install_dir/bin:\$PATH" >> /etc/profile
+    [ -n "`grep ^'export PATH=' /etc/profile`" -a -z "`grep $mysql_install_dir /etc/profile`" ] && sed -i "s@^export PATH=\(.*\)@export PATH=$mysql_install_dir/bin:\1@" /etc/profile
 
     . /etc/profile
 
@@ -148,25 +176,6 @@ EOF
     rm -rf /etc/ld.so.conf.d/{mysql,mariadb,percona}*.conf
     echo "$mysql_install_dir/lib" > mysql.conf
     /sbin/ldconfig
-    service mysqld stop
-    service mysqld start
-}
-
-function build_Nginx(){
-
-    if [[ ! -f "./nginx-${nginx_version}.tar.gz" ]]
-    then
-        echo "the nginx install file not found"
-        wget http://nginx.org/download/nginx-${nginx_version}.tar.gz
-    fi
-
-function build_Nginx(){
-
-    if [[ ! -f "./nginx-${nginx_version}.tar.gz" ]]
-    then
-        echo "the nginx install file not found"
-        wget http://nginx.org/download/nginx-${nginx_version}.tar.gz
-    fi
     service mysqld stop
     service mysqld start
 }
@@ -208,8 +217,6 @@ function build_Nginx(){
    echo "/usr/local/nginx/sbin/nginx" >> /etc/rc.local
 
 }
-
-
 update_install
 build_MySQL
 build_Nginx
