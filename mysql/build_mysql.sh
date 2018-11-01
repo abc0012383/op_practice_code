@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-mysql_install_dir=/usr/local/mysql
-mysql_data_dir=/data/mysql
 mysql_6_version=5.6.41
 dbrootpwd=root
 
@@ -8,38 +6,21 @@ nginx_install_dir=/usr/local/nginx
 nginx_version=1.14.0
 
 
-Mem=`free -m | awk '/Mem:/{print $2}'`
-
-
 function update_install(){
 
-/usr/bin/systemctl stop firewalld
-/usr/bin/systemctl disable firewalld
-/usr/sbin/iptables -F
-
-yum -y install epel-release wget telnet net-tools python-paramiko gcc gcc-c++ git dejavu-sans-fonts python-setuptools python-devel sendmail mailx net-snmp net-snmp-devel net-snmp-utils freetype-devel libpng-devel perl unbound libtasn1-devel p11-kit-devel OpenIPMI unixODBC vim make cmake bison-devel ncurses-devel lsof rsync pcre pcre-devel zlib zlib-devel openssl openssl-devel
-
-yum -y update
-
+#/usr/bin/systemctl stop firewalld
+#/usr/bin/systemctl disable firewalld
+#/usr/sbin/iptables -F
 }
 
 function build_MySQL()
-{
-    if [[ ! -f "./mysql-${mysql_6_version}.tar.gz" ]]
-    then
-        echo "the mysql-file not found"
-        wget https://cdn.mysql.com//Downloads/MySQL-5.6/mysql-${mysql_6_version}.tar.gz
-    fi
-
-    [[ -f "./mysql-${mysql_6_version}.tar.gz" ]] && exit
-
-    id -u mysql >/dev/null 2>&1
     [ $? -ne 0 ] && useradd -M -s /sbin/nologin mysql
 
     mkdir -p $mysql_data_dir;chown mysql.mysql -R $mysql_data_dir
     tar zxf mysql-${mysql_6_version}.tar.gz
     cd mysql-$mysql_6_version
     make clean
+
     [ ! -d "$mysql_install_dir" ] && mkdir -p $mysql_install_dir
     cmake . -DCMAKE_INSTALL_PREFIX=$mysql_install_dir \
     -DMYSQL_DATADIR=$mysql_data_dir \
@@ -47,21 +28,12 @@ function build_MySQL()
     -DWITH_INNOBASE_STORAGE_ENGINE=1 \
     -DWITH_PARTITION_STORAGE_ENGINE=1 \
     -DWITH_FEDERATED_STORAGE_ENGINE=1 \
-    -DWITH_BLACKHOLE_STORAGE_ENGINE=1 \
-    -DWITH_MYISAM_STORAGE_ENGINE=1 \
     -DWITH_INNOBASE_STORAGE_ENGINE=1 \
     -DMYSQL_TCP_PORT=3306 \
     -DENABLED_LOCAL_INFILE=1 \
     -DENABLE_DTRACE=0 \
-    -DEXTRA_CHARSETS=all \
-    -DDEFAULT_CHARSET=utf8mb4 \
     -DDEFAULT_COLLATION=utf8mb4_general_ci \
     -DWITH_EMBEDDED_SERVER=1 \
-
-    make
-    make install
-
-    if [ -d "$mysql_install_dir/support-files" ];then
         echo "${CSUCCESS}MySQL install successfully! ${CEND}"
         cd ..
         /bin/rm -rf mysql-$mysql_6_version
@@ -73,15 +45,11 @@ function build_MySQL()
 
     /bin/cp $mysql_install_dir/support-files/mysql.server /etc/init.d/mysqld
     chmod +x /etc/init.d/mysqld
-    chkconfig mysqld on
-
     # my.cf
     [ -d "/etc/mysql" ] && /bin/mv /etc/mysql{,_bk}
     cat > /etc/my.cnf << EOF
+
 [client]
-port = 3306
-socket = /tmp/mysql.sock
-default-character-set = utf8mb4
 
 [mysqld]
 port = 3306
@@ -94,22 +62,10 @@ user = mysql
 bind-address = 0.0.0.0
 server-id = 1
 
-init-connect = 'SET NAMES utf8mb4'
-character-set-server = utf8mb4
 
 skip-name-resolve
 skip-external-locking
-#skip-networking
-back_log = 300
-
-max_connections = 1000
-max_connect_errors = 6000
-open_files_limit = 65535
-table_open_cache = 128
 max_allowed_packet = 4M
-binlog_cache_size = 1M
-max_heap_table_size = 8M
-tmp_table_size = 16M
 
 read_buffer_size = 2M
 read_rnd_buffer_size = 8M
@@ -121,26 +77,10 @@ query_cache_type = 1
 query_cache_size = 8M
 query_cache_limit = 2M
 ft_min_word_len = 4
-log_bin = mysql-bin
-binlog_format = mixed
-expire_logs_days = 10
-log_error = $mysql_data_dir/mysql-error.log
-slow_query_log = 1
-long_query_time = 1
-#slow_query_log_file = $mysql_data_dir/mysql-slow.log
-performance_schema = 0
-explicit_defaults_for_timestamp
 
-#lower_case_table_names = 1
-default_storage_engine = InnoDB
 #default-storage-engine = MyISAM
 innodb_file_per_table = 1
 innodb_open_files = 500
-innodb_buffer_pool_size = 64M
-innodb_write_io_threads = 4
-innodb_read_io_threads = 4
-innodb_thread_concurrency = 0
-innodb_purge_threads = 1
 innodb_flush_log_at_trx_commit = 2
 innodb_log_buffer_size = 2M
 innodb_log_file_size = 32M
@@ -153,8 +93,6 @@ myisam_sort_buffer_size = 8M
 myisam_max_sort_file_size = 10G
 myisam_repair_threads = 1
 
-interactive_timeout = 28800
-wait_timeout = 28800
 
 [mysqldump]
 quick
@@ -164,8 +102,6 @@ max_allowed_packet = 16M
 key_buffer_size = 8M
 sort_buffer_size = 8M
 read_buffer = 4M
-write_buffer = 4M
-
 EOF
 
     if [ $Mem -gt 1500 -a $Mem -le 2500 ];then
@@ -199,7 +135,6 @@ EOF
     chown mysql.mysql -R $mysql_data_dir
     service mysqld start
     [ -z "`grep ^'export PATH=' /etc/profile`" ] && echo "export PATH=$mysql_install_dir/bin:\$PATH" >> /etc/profile
-    [ -n "`grep ^'export PATH=' /etc/profile`" -a -z "`grep $mysql_install_dir /etc/profile`" ] && sed -i "s@^export PATH=\(.*\)@export PATH=$mysql_install_dir/bin:\1@" /etc/profile
 
     . /etc/profile
 
@@ -217,7 +152,26 @@ EOF
     service mysqld start
 }
 
-function build_nginx(){
+function build_Nginx(){
+
+    if [[ ! -f "./nginx-${nginx_version}.tar.gz" ]]
+    then
+        echo "the nginx install file not found"
+        wget http://nginx.org/download/nginx-${nginx_version}.tar.gz
+    fi
+
+function build_Nginx(){
+
+    if [[ ! -f "./nginx-${nginx_version}.tar.gz" ]]
+    then
+        echo "the nginx install file not found"
+        wget http://nginx.org/download/nginx-${nginx_version}.tar.gz
+    fi
+    service mysqld stop
+    service mysqld start
+}
+
+function build_Nginx(){
 
     if [[ ! -f "./nginx-${nginx_version}.tar.gz" ]]
     then
@@ -235,16 +189,27 @@ function build_nginx(){
     make clean
     [ ! -d "$nginx_install_dir" ] && mkdir -p $nginx_install_dir
 
-    ./configure --prefix=$nginx_install_dir
+    ./configure --prefix=$nginx_install_dir --user=nginx --group=nginx --with-http_stub_status_module --with-http_ssl_module
 
     make&&make install
 
     ${nginx_install_dir}/sbin/nginx
 
-    echo "/usr/local/nginx/sbin/nginx" >> /etc/rc.local
+    /usr/bin/curl -I 127.0.0.1
+
+    if [ $? -eq 0 ];then
+        echo "${CSUCCESS}Nginx install successfully! ${CEND}"
+        cd ..
+        /bin/rm -rf nginx-$nginx_version
+    else
+        kill -9 $$
+    fi
+
+   echo "/usr/local/nginx/sbin/nginx" >> /etc/rc.local
+
 }
 
 
 update_install
 build_MySQL
-build_nginx
+build_Nginx
